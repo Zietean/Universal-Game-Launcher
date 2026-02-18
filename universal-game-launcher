@@ -1,0 +1,206 @@
+import tkinter as tk
+import customtkinter as ctk
+from tkinter import filedialog, messagebox
+import subprocess
+import socket
+import json
+import os
+
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
+
+
+class UniversalLauncher(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+
+        self.title("Universal Game Launcher")
+        self.geometry("600x850")
+        self.config_file = "profiles.json"
+
+        # Data
+        self.profiles = {}
+        self.current_profile_name = "Default"
+        self.exe_path = ""
+        self.arguments = []
+
+        # --- UI Sections ---
+        self.setup_profile_section()
+        self.add_horizontal_line()
+        self.setup_exe_section()
+        self.add_horizontal_line()
+        self.setup_dns_section()
+        self.add_horizontal_line()
+        self.setup_args_section()
+
+        # Launch & Debug Section
+        self.setup_launch_section()
+
+        # Mini Console for feedback
+        self.debug_box = ctk.CTkTextbox(self, height=80, width=500, font=("Courier", 12))
+        self.debug_box.pack(pady=10)
+        self.log("Launcher Ready.")
+
+        self.load_all_profiles()
+
+    def log(self, text):
+        self.debug_box.insert("end", f"> {text}\n")
+        self.debug_box.see("end")
+
+    def add_horizontal_line(self):
+        line = ctk.CTkFrame(self, height=2, fg_color="#333333")
+        line.pack(fill="x", padx=20, pady=10)
+
+    def setup_profile_section(self):
+        ctk.CTkLabel(self, text="Profile Management", font=("Arial", 16, "bold")).pack(pady=(10, 5))
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(pady=5)
+
+        self.profile_dropdown = ctk.CTkOptionMenu(row, values=["Default"], command=self.switch_profile)
+        self.profile_dropdown.pack(side="left", padx=5)
+
+        self.new_profile_entry = ctk.CTkEntry(row, placeholder_text="New Profile Name", width=150)
+        self.new_profile_entry.pack(side="left", padx=5)
+
+        ctk.CTkButton(row, text="+", width=30, command=self.create_profile).pack(side="left", padx=2)
+
+    def setup_exe_section(self):
+        ctk.CTkLabel(self, text="1. Executable Path", font=("Arial", 14, "bold")).pack(pady=5)
+        self.btn_browse = ctk.CTkButton(self, text="Select Game EXE", command=self.browse_exe)
+        self.btn_browse.pack(pady=5)
+        self.path_display = ctk.CTkLabel(self, text="No file selected", wraplength=500, text_color="gray")
+        self.path_display.pack(pady=5)
+
+    def setup_dns_section(self):
+        ctk.CTkLabel(self, text="DNS Resolver (Quick IP Lookup)", font=("Arial", 14)).pack(pady=5)
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(pady=5)
+        self.dns_entry = ctk.CTkEntry(row, placeholder_text="server.domain.com", width=250)
+        self.dns_entry.pack(side="left", padx=5)
+        ctk.CTkButton(row, text="Resolve", width=80, command=self.resolve_dns).pack(side="left", padx=5)
+        self.dns_result = ctk.CTkLabel(self, text="", text_color="cyan")
+        self.dns_result.pack()
+
+    def setup_args_section(self):
+        ctk.CTkLabel(self, text="2. Launch Arguments", font=("Arial", 14, "bold")).pack(pady=5)
+        self.arg_input = ctk.CTkEntry(self, placeholder_text="-argument value", width=400)
+        self.arg_input.pack(pady=5)
+
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(pady=5)
+        ctk.CTkButton(btn_row, text="Add", width=100, command=self.add_argument).pack(side="left", padx=5)
+        ctk.CTkButton(btn_row, text="Clear All", width=100, fg_color="#555555", command=self.clear_args).pack(
+            side="left", padx=5)
+
+        self.args_list_frame = ctk.CTkScrollableFrame(self, width=500, height=180, label_text="Active Arguments")
+        self.args_list_frame.pack(pady=10)
+
+    def setup_launch_section(self):
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(pady=10)
+        ctk.CTkButton(row, text="💾 Save Profile", fg_color="#34495e", command=self.save_current_profile).pack(
+            side="left", padx=10)
+        ctk.CTkButton(row, text="🚀 LAUNCH", font=("Arial", 16, "bold"), fg_color="#2ecc71", hover_color="#27ae60",
+                      width=150, height=40, command=self.launch_game).pack(side="left", padx=10)
+
+    def browse_exe(self):
+        file = filedialog.askopenfilename(filetypes=[("Executable", "*.exe")])
+        if file:
+            self.exe_path = file
+            self.path_display.configure(text=file, text_color="white")
+            self.log(f"Selected: {os.path.basename(file)}")
+
+    def resolve_dns(self):
+        domain = self.dns_entry.get().strip()
+        try:
+            ip = socket.gethostbyname(domain)
+            self.dns_result.configure(text=f"IP: {ip}", text_color="cyan")
+            self.log(f"Resolved {domain} to {ip}")
+        except:
+            self.dns_result.configure(text="Invalid Domain", text_color="red")
+
+    def add_argument(self):
+        val = self.arg_input.get().strip()
+        if val:
+            self.arguments.append(val)
+            self.arg_input.delete(0, tk.END)
+            self.refresh_arg_ui()
+            self.log(f"Added Arg: {val}")
+
+    def clear_args(self):
+        self.arguments = []
+        self.refresh_arg_ui()
+        self.log("Arguments Cleared")
+
+    def refresh_arg_ui(self):
+        for w in self.args_list_frame.winfo_children(): w.destroy()
+        for arg in self.arguments:
+            f = ctk.CTkFrame(self.args_list_frame, fg_color="transparent")
+            f.pack(fill="x", pady=2)
+            ctk.CTkLabel(f, text=arg, anchor="w").pack(side="left", padx=5, expand=True, fill="x")
+            ctk.CTkButton(f, text="X", width=30, fg_color="#e74c3c", command=lambda a=arg: self.remove_arg(a)).pack(
+                side="right")
+
+    def remove_arg(self, arg):
+        self.arguments.remove(arg)
+        self.refresh_arg_ui()
+
+    def create_profile(self):
+        name = self.new_profile_entry.get().strip()
+        if name and name not in self.profiles:
+            self.profiles[name] = {"exe": "", "args": []}
+            self.update_dropdown()
+            self.profile_dropdown.set(name)
+            self.switch_profile(name)
+            self.new_profile_entry.delete(0, tk.END)
+            self.log(f"Created profile: {name}")
+
+    def switch_profile(self, name):
+        self.current_profile_name = name
+        p = self.profiles.get(name, {"exe": "", "args": []})
+        self.exe_path = p["exe"]
+        self.arguments = p["args"]
+        self.path_display.configure(text=self.exe_path if self.exe_path else "No file selected")
+        self.refresh_arg_ui()
+        self.log(f"Switched to: {name}")
+
+    def save_current_profile(self):
+        self.profiles[self.current_profile_name] = {"exe": self.exe_path, "args": self.arguments}
+        with open(self.config_file, "w") as f: json.dump(self.profiles, f)
+        messagebox.showinfo("Success", f"Profile '{self.current_profile_name}' saved!")
+        self.log("Data saved to profiles.json")
+
+    def load_all_profiles(self):
+        if os.path.exists(self.config_file):
+            with open(self.config_file, "r") as f: self.profiles = json.load(f)
+            self.update_dropdown()
+            first = list(self.profiles.keys())[0]
+            self.profile_dropdown.set(first)
+            self.switch_profile(first)
+
+    def update_dropdown(self):
+        self.profile_dropdown.configure(values=list(self.profiles.keys()))
+
+    def launch_game(self):
+        if not self.exe_path:
+            messagebox.showwarning("Warning", "Please select an EXE first!")
+            return
+
+        game_dir = os.path.dirname(self.exe_path)
+
+        # FIX: Building the string exactly like a .bat file
+        args_string = " ".join(self.arguments)
+        full_command = f'"{self.exe_path}" {args_string}'
+
+        self.log(f"Executing: {full_command}")
+
+        try:
+            # shell=True handles the command exactly like CMD/Batch
+            subprocess.Popen(full_command, cwd=game_dir, shell=True)
+        except Exception as e:
+            messagebox.showerror("Launch Error", f"Failed to start: {e}")
+
+
+if __name__ == "__main__":
+    app = UniversalLauncher()
+    app.mainloop()
